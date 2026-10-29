@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vivecraft Pumpkin Extension — migration architecture review</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'strict', flowchart: { useMaxWidth: true } });
+</script>
+<style>
+body{background:#fafafa;color:#171717;font-family:system-ui,sans-serif;line-height:1.6}main{max-width:1180px;margin:auto;padding:40px 24px}article,.note{background:white;border:1px solid #d4d4d4;border-radius:12px;padding:24px;margin:24px 0}h1{font-size:2rem;font-weight:750}h2{font-size:1.5rem;font-weight:700}h3{font-weight:650;margin-bottom:12px}.badge{display:inline-block;border:1px solid #737373;border-radius:20px;padding:2px 12px;margin:8px 4px 12px 0;font-size:.85rem}.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:20px 0}.diagram{border:1px solid #e5e5e5;border-radius:8px;padding:16px;min-height:320px;overflow:auto}.files{font: .85rem/1.7 ui-monospace,monospace;overflow-wrap:anywhere;margin:12px 0}p,ul{margin:12px 0}ul{list-style:disc;padding-left:24px}a{text-decoration:underline}small{color:#525252}.deep{border:3px solid #262626;border-radius:8px;padding:20px;margin:16px 0}.stack{border:1px solid #737373;padding:12px;margin:12px 0;border-radius:6px}.arrow{text-align:center;font-size:1.4rem}.caution{border-left:4px solid #737373;padding-left:16px}@media(max-width:760px){.pair{grid-template-columns:1fr}}@media print{article{break-inside:avoid}.pair{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body><main>
+<header><small>ARCHITECTURE DISCOVERY · 2026-10-27 · NOT AN APPROVED IMPLEMENTATION PLAN</small><h1>Vivecraft → Pumpkin</h1><p>Solid outlines: modules. Heavy outlines: proposed deep modules. Arrows: knowledge or call dependencies. All diagrams use neutral styling; labels carry meaning without color.</p></header>
+<section class="note"><h2>Implementation update</h2><p>The sessions direction and implementation plan were approved. The Rust/WASM sessions build passes native checks; real Pumpkin loading, console/import commands and full restart/shutdown passed on 2026-10-29. On 2026-10-30 the maintainer reported successful in-game testing with no observed issues, so the implemented sessions set is treated as stable. Full Java parity and unenumerated client/player edge cases remain distinct. This report preserves the original discovery snapshot. Use <a href="target-and-capabilities.md">the current target/capability matrix</a> and <a href="testing.md">test results</a> for implementation status.</p></section>
+<section class="note"><h2>Original discovery snapshot</h2><ul>
+<li>The existing Java source combines Vivecraft protocol negotiation, VR pose tracking, configuration, and substantial gameplay changes.</li>
+<li>Current Pumpkin Rust documentation targets WebAssembly <code>wasm32-wasip2</code>, not a drop-in Bukkit JAR.</li>
+<li>At inspected Pumpkin revision <code>de9538a177a14a0835a4edd15a88f19982943626</code>, WIT v0.2 exposes <code>player-custom-payload-event</code> and Java-player <code>send-custom-payload</code>.</li>
+<li>Declarations are evidence of an exposed interface, not runtime validation. Aim correction, crawl physics, fall handling, mob behavior, and feature parity remain unverified.</li>
+<li>No target server/client pair, supported protocol range, implementation language, or policy on Pumpkin changes has been approved.</li>
+</ul></section>
+<article id="sessions"><h2>1. Vivecraft sessions</h2><span class="badge">Strong</span><span class="badge">Concrete wire-compatibility dependency</span>
+<div class="files">core/src/main/java/org/vivecraft/network/NetworkHandler.java<br>core/src/main/java/org/vivecraft/network/packet/<br>core/src/main/java/org/vivecraft/network/NetworkVersion.java<br>core/src/main/java/org/vivecraft/VivePlayer.java<br>core/src/main/java/org/vivecraft/ViveMain.java</div>
+<p><strong>Friction:</strong> A payload handler also negotiates features, reads global settings, mutates Bukkit players, and initiates gameplay behavior.</p>
+<p><strong>Change:</strong> Concentrate protocol decoding, negotiation, session state, and outgoing messages in a host-independent Vivecraft sessions module; keep Pumpkin calls in one adapter.</p>
+<div class="pair"><section class="diagram"><h3>Current</h3><pre class="mermaid">flowchart TD
+Client[Vivecraft client] --> Handler[NetworkHandler]
+Handler --> Packets[Packet classes]
+Handler --> Player[VivePlayer and Bukkit Player]
+Handler --> Globals[ViveMain global settings and helpers]
+Handler --> Gameplay[Teleport, crawl, aim and inventory changes]
+</pre></section><section class="diagram"><h3>Proposed</h3><pre class="mermaid">flowchart TD
+Client[Vivecraft client] --> Adapter[Pumpkin adapter]
+Adapter --> Sessions[Vivecraft sessions: codec, negotiation and state]
+Sessions --> Out[Outgoing payloads and gameplay requests]
+Out --> Adapter
+classDef deep stroke:#262626,stroke-width:3px;
+class Sessions deep;
+</pre></section></div>
+<ul><li>Locality for wire compatibility</li><li>Leverage across protocol versions</li><li>Tests through the sessions interface</li></ul>
+<p><strong>Test surface:</strong> Recorded handshake and pose bytes enter the sessions interface; assertions cover negotiation, outgoing bytes, state transitions, malformed input, and disconnect cleanup. Golden vectors must match the Java protocol, not merely round-trip Rust code.</p>
+<p><strong>Deletion test:</strong> Removing this module would duplicate protocol-version and session knowledge in Pumpkin event handlers.</p>
+</article>
+<article id="interaction"><h2>2. VR interaction geometry</h2><span class="badge">Worth exploring</span><span class="badge">Pumpkin execution-hook dependency</span>
+<div class="files">core/src/main/java/org/vivecraft/VivePlayer.java<br>core/src/main/java/org/vivecraft/network/AimFixHandler.java<br>core/src/main/java/org/vivecraft/events/ProjectileEvents.java<br>core/src/main/java/org/vivecraft/events/DamageEvents.java<br>core/src/main/java/org/vivecraft/compat/NMSHelper.java</div>
+<p><strong>Friction:</strong> Controller-space geometry, active-hand policy, bow aim, damage rules, and server execution details are coupled through mutable player state and NMS calls.</p>
+<p><strong>Change:</strong> Keep pose transforms and VR interaction decisions together, while a Pumpkin adapter owns the actual execution hooks. Prove those hooks before promising parity.</p>
+<div class="pair"><section class="diagram"><h3>Current</h3><div class="stack">VivePlayer: pose + aim + Bukkit player</div><div class="arrow">↓</div><div class="stack">AimFixHandler: save → override → handle packet → restore</div><div class="arrow">↓</div><div class="stack">NMSHelper + version-specific internals</div></section><section class="diagram"><h3>Proposed</h3><div class="stack">Authoritative player snapshot + validated VR pose</div><div class="arrow">↓</div><div class="deep">VR interaction geometry<br><small>Body-part transforms, controller/bow aim, interaction decisions</small></div><div class="arrow">↓</div><div class="stack">Pumpkin adapter: proven execution hooks only</div></section></div>
+<ul><li>Locality for coordinate conventions</li><li>Explicit server execution responsibilities</li><li>Tests through the interaction interface</li></ul>
+<p><strong>Test surface:</strong> Known poses and player snapshots produce expected world-space origins, directions, seated fallbacks, and damage decisions. Integration tests must establish actual block, item, and projectile behavior in Pumpkin.</p>
+<p class="caution"><strong>Feasibility gate:</strong> A packet event is not proof of a safe, scoped aim override. Do not emulate the Java mutation technique without checking Pumpkin execution order and concurrency.</p>
+</article>
+<article id="policy"><h2>3. Server VR policy</h2><span class="badge">Worth exploring</span><span class="badge">Configuration and host-capability dependency</span>
+<div class="files">core/src/main/java/org/vivecraft/config/Config.java<br>core/src/main/java/org/vivecraft/config/ConfigBuilder.java<br>core/src/main/java/org/vivecraft/network/PacketUtils.java<br>core/src/main/java/org/vivecraft/commands/<br>core/src/main/java/org/vivecraft/PermissionManager.java</div>
+<p><strong>Friction:</strong> Server configuration is read from global state in negotiation and gameplay code; some settings describe Spigot internals or optional Bukkit integrations.</p>
+<p><strong>Change:</strong> A server VR policy module validates operator configuration against proven host capabilities and produces the advertised feature policy.</p>
+<div class="pair"><section class="diagram"><h3>Current</h3><pre class="mermaid">flowchart TD
+Config[Global Config and callbacks] --> Handshake[Handshake settings]
+Config --> Commands[Config command]
+Config --> Gameplay[Gameplay handlers]
+Config --> Integrations[Vault and PlaceholderAPI]
+</pre></section><section class="diagram"><h3>Proposed</h3><pre class="mermaid">flowchart TD
+Operator[Operator configuration] --> Policy[Server VR policy]
+Capabilities[Verified Pumpkin capabilities] --> Policy
+Policy --> Advertised[Advertised client features]
+Policy --> Rules[Gameplay rules]
+classDef deep stroke:#262626,stroke-width:3px;
+class Policy deep;
+</pre></section></div>
+<ul><li>One advertised-feature policy</li><li>No silently unsupported settings</li><li>Tests through the policy interface</li></ul>
+<p><strong>Test surface:</strong> Configuration plus known host capabilities produces consistent client settings, runtime rules, and diagnostics. Unsupported requested features are reported explicitly rather than advertised as working.</p>
+<p><strong>Scope gate:</strong> Decide migration expectations for config keys, commands, permissions, Java-facing functionality, and Bukkit-only integrations before implementation.</p>
+</article>
+<section class="note"><h2>Best first candidate: <a href="#sessions">Vivecraft sessions</a></h2><p>It concentrates a real compatibility contract and enables deterministic byte-level tests, while a small Pumpkin transport experiment can validate the first host dependency.</p><p>Recommended first implementation slice, subject to approval: one pinned server/client pair → load plugin → receive VERSION → negotiate honestly → exchange pose data → verify two-client pose relay and disconnect cleanup. This is a milestone, not permission to omit remaining features.</p></section>
+<footer><h2>Evidence</h2><ul>
+<li><a href="https://github.com/Pumpkin-MC/Pumpkin-Docs/blob/master/docs/en/plugin-dev/rust/creating-project.md">Pumpkin Rust project setup</a></li>
+<li><a href="https://github.com/Pumpkin-MC/Pumpkin-Docs/blob/master/docs/en/plugin-dev/migrating-from-bukkit/index.md">Migrating from Bukkit</a></li>
+<li><a href="https://github.com/Pumpkin-MC/Pumpkin/blob/de9538a177a14a0835a4edd15a88f19982943626/crates/pumpkin-plugin-wit/v0.2/event.wit">Pinned Pumpkin event interface</a></li>
+<li><a href="https://github.com/Pumpkin-MC/Pumpkin/blob/de9538a177a14a0835a4edd15a88f19982943626/crates/pumpkin-plugin-wit/v0.2/player.wit">Pinned Pumpkin player interface</a></li>
+</ul><p><small>No existing glossary or ADRs were found in the initial Markdown inventory. Review is preliminary; no build or live gameplay validation was performed. Diagrams require internet access to the Mermaid CDN; explanatory text remains readable offline.</small></p></footer>
+</main></body></html>

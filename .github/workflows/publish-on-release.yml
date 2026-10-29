@@ -8,6 +8,8 @@ on:
 
 jobs:
   publish:
+    # Retained upstream reference only: never publish this fork to the parent's listings.
+    if: github.repository == 'Vivecraft/Vivecraft-Spigot-Extension'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6

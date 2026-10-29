@@ -1,0 +1,61 @@
+name: Pumpkin signed release preparation
+
+on:
+  push:
+    tags: ["pumpkin-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pumpkin-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/rust.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    permissions:
+      contents: read
+
+  release:
+    needs: build
+    if: github.repository == 'AMD-Boii/Vivecraft-Pumpkin-Extension'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: pumpkin-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download outputs from this workflow run
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: pumpkin-wasm
+          path: dist/package
+      - name: Verify packaged bytes
+        working-directory: dist/package
+        run: sha256sum --check SHA256SUMS
+      - name: Sign provenance for every checksummed output with GitHub OIDC
+        id: attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-checksums: dist/package/SHA256SUMS
+      - name: Export bundle and verify binary and source provenance
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE_PATH" dist/package/provenance.sigstore.json
+          gh attestation verify dist/package/*.wasm --repo "$GH_REPO" --signer-workflow "$GH_REPO/.github/workflows/pumpkin-release.yml" --bundle dist/package/provenance.sigstore.json
+          gh attestation verify dist/package/*-source.tar.gz --repo "$GH_REPO" --signer-workflow "$GH_REPO/.github/workflows/pumpkin-release.yml" --bundle dist/package/provenance.sigstore.json
+      - name: Create draft release for human review (never upload to Market)
+        run: |
+          gh release create "$RELEASE_TAG" dist/package/* --repo "$GH_REPO" --verify-tag --draft \
+            --title "Vivecraft Pumpkin ${RELEASE_TAG#pumpkin-v}" \
+            --notes "Stable-in-tested-use sessions feature set; not full Java-plugin parity. Download the WASM with its matching notices and corresponding-source archives. Verify SHA256SUMS and provenance.sigstore.json as described in docs/releasing.md at this tag. GitHub provenance is signed; this upload input does not contain a Pumpkin Market signature. Review the draft and licenses before publishing or manually submitting to Market."

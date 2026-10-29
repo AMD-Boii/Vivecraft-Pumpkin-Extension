@@ -1,0 +1,21 @@
+[package]
+name = "vivecraft-pumpkin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+vivecraft-core = { path = "../vivecraft-core" }
+# Cargo ignores build metadata in requirements; Cargo.lock pins +26.3-26.51 and its checksum.
+pumpkin-plugin-api = "=0.2.1"
+serde_json.workspace = true

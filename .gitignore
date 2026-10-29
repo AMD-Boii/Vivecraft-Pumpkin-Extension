@@ -1,5 +1,49 @@
+# Upstream Java/Gradle outputs and generated compatibility code
 .gradle/
 .idea/
 build/
 gen/stubs/src/main/java/*
 gen/generatedMC/*
+
+# Rust outputs, local tooling/downloads, and generated release packages
+/target/
+/.local/
+/dist/
+/vendor/
+/.claude/
+
+# Editor/OS state and Python caches
+.vscode/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+
+# Compiled plugins and server/runtime data (the Gradle wrapper is source tooling)
+*.wasm
+*.class
+*.jar
+!/gradle/wrapper/gradle-wrapper.jar
+*.log
+/crash-reports/
+/logs/
+/plugins/
+/world/
+/worlds/
+/pumpkin.toml
+/eula.txt
+/usercache.json
+/ops.json
+/whitelist.json
+/banned-*.json
+
+# Local credentials/private signing material; never needed by keyless release CI
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519

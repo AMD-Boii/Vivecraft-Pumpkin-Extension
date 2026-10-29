@@ -1,0 +1,53 @@
+# Isolated smoke-test overlay for Pumpkin 0.2.1+26.3-26.51.
+# Never copy this onto an existing server configuration.
+seed = "1"
+allow_nether = false
+allow_end = false
+use_favicon = false
+default_level_name = "smoke-world"
+accepts_transfers = false
+
+[networking.java]
+enabled = true
+address = "127.0.0.1:25575"
+encryption = true
+online_mode = true
+max_players = 2
+view_distance = 2
+simulation_distance = 2
+
+[networking.bedrock]
+enabled = false
+
+[networking.bedrock.nethernet]
+enabled = false
+address = "127.0.0.1:19175"
+
+[networking.query]
+enabled = false
+
+[networking.management]
+enabled = false
+address = "127.0.0.1:25585"
+
+[networking.lan_broadcast]
+enabled = false
+
+[telemetry]
+enabled = false
+public = false
+
+[plugins]
+enabled = true
+hot_reload = false
+ask_permission_confirmation = true
+allow_unsigned = true
+verify_signatures = true
+inherit_env = false
+loopback_only = true
+
+[plugins.overrides."Vivecraft Pumpkin"]
+enabled = true
+allow_unsigned = true
+allowed_permissions = ["fs.read.data", "fs.write.data"]
+loopback_only = true

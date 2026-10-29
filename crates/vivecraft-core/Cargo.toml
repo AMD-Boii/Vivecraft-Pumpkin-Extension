@@ -1,0 +1,18 @@
+[package]
+name = "vivecraft-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+# Maintained YAML implementation. The importer rejects aliases/tags before deserialization.
+saphyr = "=0.0.6"
+saphyr-parser = "=0.0.6"
